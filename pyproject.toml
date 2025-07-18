@@ -1,0 +1,27 @@
+package = "async_pcloud"
+
+[project]
+name = "async_pcloud"
+version = "0.0.1"
+authors = [
+  { name="Noob", email="111202059+Noob-Lol@users.noreply.github.com" },
+]
+description = "Async python API client for PCloud"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+license = "MIT"
+
+dependencies = [
+    "aiohttp>=3.9",
+    "setuptools>=75.8.0",
+    "wheel>=0.45.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/Noob-Lol/async_pcloud"
+Issues = "https://github.com/Noob-Lol/async_pcloud/issues"
