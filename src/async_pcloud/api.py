@@ -44,19 +44,24 @@ class PyCloudAsync:
                 raise Exception(f"Failed to {method} '{url}': code: {response_json['result']}, error: {response_json.get('error', 'Unknown error')}")
             return response_json
         
+    async def _default_get(self, url, **kwargs):
+        if not self.session: raise Exception("Not connected to PCloud API, call connect() first.")
+        r = await self.session.get(url, **kwargs)
+        return await r.read()
+        
     async def getdigest(self):
         resp = await self._do_request("getdigest", False)
         return bytes(resp["digest"], "utf-8")
-        
-    async def get_pcloud_token(self, email, password, verbose=False):
-        """Logs into pCloud and returns the token."""
-        response = await self._do_request('userinfo', False, params={'getauth': 1, 'username': email, 'password': password})
-        token = response['auth']
-        if verbose: print(token)
-        return token
     
     async def userinfo(self, **kwargs):
         return await self._do_request("userinfo", **kwargs)
+        
+    async def get_pcloud_token(self, email, password, verbose=False):
+        """Logs into pCloud and returns the token."""
+        response = await self.userinfo(auth=False, params={'getauth': 1, 'username': email, 'password': password})
+        token = response['auth']
+        if verbose: print(token)
+        return token
 
     @RequiredParameterCheck(("path", "folderid"))
     async def listfolder(self, **kwargs):
@@ -64,8 +69,9 @@ class PyCloudAsync:
     
     @RequiredParameterCheck(("path", "fileid"))
     async def getfilelink(self, **kwargs) -> str:
+        """Returns a link to the file. Or the file's bytes if download=True."""
         file_url = await self._do_request("getfilelink", **kwargs)
-        download_url = file_url['hosts'][0] + file_url['path']
+        download_url = 'https://' + file_url['hosts'][0] + file_url['path']
         return download_url
     
     async def get_all_links(self, fileid: int):
@@ -78,10 +84,20 @@ class PyCloudAsync:
         download_url = await self.getfilelink(fileid=file_info['fileid'])
         return download_url
     
-    async def uploadfile(self, file: str, content: str, folder: str):
+    @RequiredParameterCheck(("path", "fileid"))
+    async def download_file(self, **kwargs):
+        download_url = await self.getfilelink(**kwargs)
+        return await self._default_get(download_url)
+    
+    @RequiredParameterCheck(("files", "data"))
+    async def uploadfile(self, **kwargs):
+        await self._do_request("uploadfile", method="POST", **kwargs)
+
+    @RequiredParameterCheck(("path", "folderid"))
+    async def upload_one_file(self, filename: str, content: str | bytes, **kwargs):
         data = aiohttp.FormData()
-        data.add_field('filename', content, filename=file)
-        await self._do_request("uploadfile", method="POST", data=data, params={'path': f'/{folder}'})
+        data.add_field('filename', content, filename=filename)
+        await self.uploadfile(data=data, **kwargs)
 
     async def search(self, query: str, **kwargs):
         return await self._do_request('search', params={'query': query, **kwargs})
