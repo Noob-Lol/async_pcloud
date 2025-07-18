@@ -2,7 +2,7 @@ package = "async_pcloud"
 
 [project]
 name = "async_pcloud"
-version = "0.0.1"
+version = "0.0.1b1"
 authors = [
   { name="Noob", email="111202059+Noob-Lol@users.noreply.github.com" },
 ]
