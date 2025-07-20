@@ -31,6 +31,7 @@ class AsyncPyCloud:
         self.token = token
         self.folder = folder
         self.headers = headers
+        self.__version__ = __version__
         if endpoint not in self.endpoints:
             raise ValueError("Endpoint (%s) not found. Use one of: %s", endpoint, ",".join(self.endpoints.keys()),)
         else:
