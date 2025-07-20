@@ -1,9 +1,10 @@
 import aiohttp, json, logging, datetime
 from hashlib import sha1
+from . import __version__
 from async_pcloud.validate import RequiredParameterCheck, MODE_AND
 
 # from pcloud.utils
-log = logging.getLogger(__name__)
+log = logging.getLogger("async_pcloud")
 
 def to_api_datetime(dt):
     """Converter to a datetime structure the pCloud API understands
@@ -26,7 +27,7 @@ class AsyncPyCloud:
         "eapi": "https://eapi.pcloud.com/",
     }
 
-    def __init__(self, token, endpoint="eapi", folder=None, headers={"User-Agent": "async_pcloud/1.0"}):
+    def __init__(self, token, endpoint="eapi", folder=None, headers={"User-Agent": f"async_pcloud/{__version__}"}):
         self.token = token
         self.folder = folder
         self.headers = headers
@@ -54,8 +55,8 @@ class AsyncPyCloud:
         log.debug("Disconnected.")
         self.session = None
 
-    def change_token(self, token):
-        self.token = token
+    def change_token(self, new_token):
+        self.token = new_token
 
     def _fix_path(self, path: str):
         if not path.startswith("/"): path = "/" + path
@@ -68,7 +69,7 @@ class AsyncPyCloud:
         if 'auth' in data: data['auth'] = '***'
         return data
     
-    def _prepare_params(self, params: dict, auth=True,**kwargs):
+    def _prepare_params(self, params: dict, auth=True, **kwargs):
         params.update(kwargs)
         if auth: params['auth'] = self.token
         if params.get('path'): params['path'] = self._fix_path(params['path'])
@@ -87,7 +88,7 @@ class AsyncPyCloud:
     async def _get_text(self, url, auth=True, not_found_ok=False, params: dict={},**kwargs):
         if not self.session: raise NoSessionError
         params = self._prepare_params(params, auth,**kwargs)
-        log.debug(f"Request: GET {url} {self._redact_auth(params.copy())}")
+        log.debug(f"Request: GET (text) {url} {self._redact_auth(params.copy())}")
         r = await self.session.get(url, params=params)
         log.debug(f"Response: {r.status} {r.reason}")
         text = await r.text()
