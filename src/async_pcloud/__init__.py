@@ -1,4 +1,4 @@
-from async_pcloud.api import PyCloudAsync
+from async_pcloud.api import AsyncPyCloud
 
-__all__ = ["PyCloudAsync"]
-__version__ = "0.0.1b1"
+__all__ = ["AsyncPyCloud"]
+__version__ = "0.1.0"
