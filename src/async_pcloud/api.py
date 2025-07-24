@@ -20,6 +20,11 @@ class NoSessionError(Exception):
     def __init__(self, message="Not connected to PCloud API, call connect() first."):
         super().__init__(message)
 
+class NoTokenError(Exception):
+    """Raised when the token is missing."""
+    def __init__(self, message="PCloud token is missing."):
+        super().__init__(message)
+
 class AsyncPyCloud:
     """Simple async wrapper for PCloud API."""
     endpoints = {
@@ -70,14 +75,15 @@ class AsyncPyCloud:
         if 'auth' in data: data['auth'] = '***'
         return data
     
-    def _prepare_params(self, params: dict, auth=True, **kwargs):
-        params.update(kwargs)
-        if auth: params['auth'] = self.token
-        if params.get('path'): params['path'] = self._fix_path(params['path'])
-        return params
+    def _prepare_params(self, params: dict = {}, auth=True, **kwargs):
+        """Converts kwargs to params, and does auth check."""
+        new_params = {**params, **kwargs}
+        if not self.token and auth: raise NoTokenError
+        if auth and not new_params.get('auth'): new_params['auth'] = self.token
+        if new_params.get('path'): new_params['path'] = self._fix_path(new_params['path'])
+        return new_params
     
     async def _do_request(self, url, auth=True, method = "GET", data = None, params: dict={}, **kwargs) -> dict:
-        if not self.token and auth: raise Exception("PCloud token is missing.")
         if not self.session: raise NoSessionError
         params = self._prepare_params(params, auth, **kwargs)
         log.debug(f"Request: {method} {url} {self._redact_auth(params.copy())}")
