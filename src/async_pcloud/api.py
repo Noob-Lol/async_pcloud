@@ -403,28 +403,28 @@ class AsyncPyCloud:
     @RequiredParameterCheck(("code",))
     async def getpubzip(self, unzip=False, **kwargs):
         raise NotImplementedError
-        zipresponse = self._do_request(
-            "getpubzip", auth=False, json=False, **kwargs
-        )
-        if not unzip:
-            return zipresponse
-        zipfmem = BytesIO(zipresponse)
-        code = kwargs.get("code")
-        try:
-            zf = zipfile.ZipFile(zipfmem)
-        except zipfile.BadZipfile:
-            # Could also be the case, if public link is password protected.
-            log.warn(
-                f"No valid zipfile found for code f{code}. Empty content is returned."
-            )
-            return ""
-        names = zf.namelist()
-        if names:
-            contents = zf.read(names[0])
-        else:
-            log.warn(f"Zip file is empty for code f{code}. Empty content is returned.")
-            contents = ""
-        return contents
+        # zipresponse = self._do_request(
+        #     "getpubzip", auth=False, json=False, **kwargs
+        # )
+        # if not unzip:
+        #     return zipresponse
+        # zipfmem = BytesIO(zipresponse)
+        # code = kwargs.get("code")
+        # try:
+        #     zf = zipfile.ZipFile(zipfmem)
+        # except zipfile.BadZipfile:
+        #     # Could also be the case, if public link is password protected.
+        #     log.warn(
+        #         f"No valid zipfile found for code f{code}. Empty content is returned."
+        #     )
+        #     return ""
+        # names = zf.namelist()
+        # if names:
+        #     contents = zf.read(names[0])
+        # else:
+        #     log.warn(f"Zip file is empty for code f{code}. Empty content is returned.")
+        #     contents = ""
+        # return contents
     
     # Trash
     async def trash_list(self, **kwargs):
