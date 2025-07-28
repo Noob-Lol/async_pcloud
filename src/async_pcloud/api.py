@@ -1,10 +1,17 @@
-import aiohttp, json, logging, datetime
+import datetime
+import json
+import logging
 from hashlib import sha1
+
+import aiohttp
+
+from async_pcloud.validate import MODE_AND, RequiredParameterCheck
+
 from . import __version__
-from async_pcloud.validate import RequiredParameterCheck, MODE_AND
 
 # from pcloud.utils
 log = logging.getLogger("async_pcloud")
+
 
 def to_api_datetime(dt):
     """Converter to a datetime structure the pCloud API understands
@@ -15,15 +22,18 @@ def to_api_datetime(dt):
         return dt.isoformat()
     return dt
 
+
 class NoSessionError(Exception):
     """Raised when the session is not connected."""
     def __init__(self, message="Not connected to PCloud API, call connect() first."):
         super().__init__(message)
 
+
 class NoTokenError(Exception):
     """Raised when the token is missing."""
     def __init__(self, message="PCloud token is missing."):
         super().__init__(message)
+
 
 class AsyncPyCloud:
     """Simple async wrapper for PCloud API."""
@@ -49,14 +59,16 @@ class AsyncPyCloud:
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.disconnect()
-    
+
     async def connect(self):
         """Creates a session, must be called before any requests."""
-        self.session = aiohttp.ClientSession(base_url=self.endpoint, headers=self.headers, timeout=aiohttp.ClientTimeout(10), raise_for_status=True)
+        timeout = aiohttp.ClientTimeout(10)
+        self.session = aiohttp.ClientSession(self.endpoint, headers=self.headers, timeout=timeout, raise_for_status=True)
         log.debug("Connected.")
 
     async def disconnect(self):
-        if not self.session: return
+        if not self.session:
+            return
         await self.session.close()
         log.debug("Disconnected.")
         self.session = None
@@ -65,36 +77,45 @@ class AsyncPyCloud:
         self.token = new_token
 
     def _fix_path(self, path: str):
-        if not path.startswith("/"): path = "/" + path
-        if self.folder: path = f"/{self.folder}{path}"
-        if path.endswith("/"): path = path[:-1]
+        if not path.startswith("/"):
+            path = "/" + path
+        if self.folder:
+            path = f"/{self.folder}{path}"
+        if path.endswith("/"):
+            path = path[:-1]
         return path
-    
+
     def _redact_auth(self, data: dict):
         # this is genius
-        if 'auth' in data: data['auth'] = '***'
+        if 'auth' in data:
+            data['auth'] = '***'
         return data
-    
+
     def _prepare_params(self, params: dict = {}, auth=True, **kwargs):
         """Converts kwargs to params, and does auth check."""
         new_params = {**params, **kwargs}
-        if not self.token and auth: raise NoTokenError
-        if auth and not new_params.get('auth'): new_params['auth'] = self.token
-        if new_params.get('path'): new_params['path'] = self._fix_path(new_params['path'])
+        if not self.token and auth:
+            raise NoTokenError
+        if auth and not new_params.get('auth'):
+            new_params['auth'] = self.token
+        if new_params.get('path'):
+            new_params['path'] = self._fix_path(new_params['path'])
         return new_params
-    
-    async def _do_request(self, url, auth=True, method = "GET", data = None, params: dict={}, **kwargs) -> dict:
-        if not self.session: raise NoSessionError
+
+    async def _do_request(self, url, auth=True, method="GET", data=None, params: dict = {}, **kwargs) -> dict:
+        if not self.session:
+            raise NoSessionError
         params = self._prepare_params(params, auth, **kwargs)
         log.debug(f"Request: {method} {url} {self._redact_auth(params.copy())}")
         async with self.session.request(method, url, data=data, params=params) as response:
             response_json = await response.json()
             log.debug(f"Response: {response_json} {response.status} {response.reason}")
             return response_json
-        
-    async def _get_text(self, url, auth=True, not_found_ok=False, params: dict={},**kwargs):
-        if not self.session: raise NoSessionError
-        params = self._prepare_params(params, auth,**kwargs)
+
+    async def _get_text(self, url, auth=True, not_found_ok=False, params: dict = {}, **kwargs):
+        if not self.session:
+            raise NoSessionError
+        params = self._prepare_params(params, auth, **kwargs)
         log.debug(f"Request: GET (text) {url} {self._redact_auth(params.copy())}")
         r = await self.session.get(url, params=params)
         log.debug(f"Response: {r.status} {r.reason}")
@@ -105,15 +126,17 @@ class AsyncPyCloud:
             return text
         if j.get("error"):
             log.debug(f"Bad response: {j}")
-            if not_found_ok and "not found" in j["error"]: return
+            if not_found_ok and "not found" in j["error"]:
+                return
             raise Exception(j["error"])
         return text
-        
+
     async def _default_get(self, url, **kwargs):
-        if not self.session: raise NoSessionError
+        if not self.session:
+            raise NoSessionError
         r = await self.session.get(url, **kwargs)
         return await r.read()
-    
+
     # Authentication stuff
     async def getdigest(self):
         resp = await self._do_request("getdigest", False)
@@ -123,15 +146,23 @@ class AsyncPyCloud:
         """Logs into pCloud and returns the token. Defaults to 1 year. Also prints it if verbose."""
         digest = await self.getdigest()
         passworddigest = sha1(password.encode("utf-8") + bytes(sha1(email.encode("utf-8")).hexdigest(), "utf-8") + digest)
-        response = await self.userinfo(auth=False, params={'getauth': 1, 'username': email, "digest": digest.decode("utf-8"), "passworddigest": passworddigest.hexdigest(), "authexpire": token_expire})
+        params = {
+            "getauth": 1,
+            "username": email,
+            "digest": digest.decode("utf-8"),
+            "passworddigest": passworddigest.hexdigest(),
+            "authexpire": token_expire
+        }
+        response = await self.userinfo(auth=False, params=params)
         token = response['auth']
-        if verbose: print(token)
+        if verbose:
+            print(token)
         return token
-    
+
     # General
     async def userinfo(self, **kwargs):
         return await self._do_request("userinfo", **kwargs)
-    
+
     def supportedlanguages(self):
         return self._do_request("supportedlanguages")
 
@@ -157,7 +188,7 @@ class AsyncPyCloud:
 
     async def getapiserver(self):
         return await self._do_request("getapiserver")
-    
+
     # Folder
     @RequiredParameterCheck(("path", "folderid", "name"))
     async def createfolder(self, **kwargs):
@@ -170,7 +201,7 @@ class AsyncPyCloud:
     @RequiredParameterCheck(("path", "folderid"))
     async def listfolder(self, **kwargs):
         return await self._do_request("listfolder", **kwargs)
-    
+
     @RequiredParameterCheck(("path", "folderid"))
     async def renamefolder(self, **kwargs):
         return await self._do_request("renamefolder", **kwargs)
@@ -225,15 +256,15 @@ class AsyncPyCloud:
 
     async def renamefile(self, **kwargs):
         return await self._do_request("renamefile", **kwargs)
-    
+
     @RequiredParameterCheck(("path", "fileid"))
     async def stat(self, **kwargs):
         return await self._do_request("stat", **kwargs)
-    
+
     async def search(self, query: str, **kwargs):
         """Undocumented, also supports offset and limit kwargs."""
         return await self._do_request('search', params={'query': query, **kwargs})
-    
+
     # Auth
     async def sendverificationemail(self, **kwargs):
         return await self._do_request("sendverificationemail", **kwargs)
@@ -267,38 +298,40 @@ class AsyncPyCloud:
 
     async def deletetoken(self, **kwargs):
         return await self._do_request("deletetoken", **kwargs)
-    
+
     async def sendchangemail(self, **kwargs):
         return await self._do_request("sendchangemail", **kwargs)
-    
+
     async def changemail(self, **kwargs):
         return await self._do_request("changemail", **kwargs)
-    
+
     async def senddeactivatemail(self, **kwargs):
         return await self._do_request("senddeactivatemail", **kwargs)
-    
+
     async def deactivateuser(self, **kwargs):
         return await self._do_request("deactivateuser", **kwargs)
 
     # Streaming
     def _make_link(self, response: dict, not_found_ok=False):
         if 'not found' in response.get('error', ''):
-            if not_found_ok: return
+            if not_found_ok:
+                return
             raise Exception(response['error'])
         return 'https://' + response['hosts'][0] + response['path']
 
     @RequiredParameterCheck(("path", "fileid"))
-    async def getfilelink(self, not_found_ok=False,**kwargs) -> str | None:
+    async def getfilelink(self, not_found_ok=False, **kwargs) -> str | None:
         """Returns a link to the file."""
         response = await self._do_request("getfilelink", **kwargs)
         return self._make_link(response, not_found_ok)
-    
+
     @RequiredParameterCheck(("path", "fileid"))
-    async def download_file(self, not_found_ok=False,**kwargs):
-        download_url = await self.getfilelink(not_found_ok,**kwargs)
-        if download_url is None: return
+    async def download_file(self, not_found_ok=False, **kwargs):
+        download_url = await self.getfilelink(not_found_ok, **kwargs)
+        if download_url is None:
+            return
         return await self._default_get(download_url)
-    
+
     @RequiredParameterCheck(("path", "fileid"))
     async def getvideolink(self, **kwargs):
         response = await self._do_request("getvideolink", **kwargs)
@@ -319,9 +352,9 @@ class AsyncPyCloud:
         return self._make_link(response)
 
     @RequiredParameterCheck(("path", "fileid"))
-    async def gettextfile(self, not_found_ok=False,**kwargs):
+    async def gettextfile(self, not_found_ok=False, **kwargs):
         return await self._get_text("gettextfile", not_found_ok=not_found_ok, **kwargs)
-    
+
     # Archiving
     @RequiredParameterCheck(("folderid", "folderids", "fileids"))
     async def getzip(self, **kwargs):
@@ -335,7 +368,7 @@ class AsyncPyCloud:
     @RequiredParameterCheck(("topath", "tofolderid", "toname"))
     async def savezip(self, **kwargs):
         return await self._do_request("savezip", **kwargs)
-    
+
     @RequiredParameterCheck(("path", "fileid"))
     @RequiredParameterCheck(("topath", "tofolderid"))
     async def extractarchive(self, **kwargs):
@@ -348,7 +381,7 @@ class AsyncPyCloud:
     @RequiredParameterCheck(("progresshash",))
     async def savezipprogress(self, **kwargs):
         return await self._do_request("savezipprogress", **kwargs)
-    
+
     # Sharing
     @RequiredParameterCheck(("path", "folderid"))
     @RequiredParameterCheck(("mail", "permissions"), mode=MODE_AND)
@@ -357,7 +390,7 @@ class AsyncPyCloud:
 
     async def listshares(self, **kwargs):
         return await self._do_request("listshares", **kwargs)
-    
+
     # Public links
     @RequiredParameterCheck(("path", "fileid"))
     async def getfilepublink(self, **kwargs):
@@ -425,7 +458,7 @@ class AsyncPyCloud:
         #     log.warn(f"Zip file is empty for code f{code}. Empty content is returned.")
         #     contents = ""
         # return contents
-    
+
     # Trash
     async def trash_list(self, **kwargs):
         return await self._do_request("trash_list", **kwargs)
@@ -437,7 +470,7 @@ class AsyncPyCloud:
     @RequiredParameterCheck(("fileid", "folderid"))
     async def trash_restore(self, **kwargs):
         return await self._do_request("trash_restore", **kwargs)
-    
+
     @RequiredParameterCheck(("fileid", "folderid"))
     async def trash_clear(self, **kwargs):
         return await self._do_request("trash_clear", **kwargs)
