@@ -24,6 +24,12 @@ class TestPcloudApi(object):
             token = await pc.get_auth("test@example.com", "password")
             assert token == "TOKEN"
 
+    async def test_upload_files(self):
+        async with DummyPyCloud() as pc:
+            testfile = os.path.join(os.path.dirname(__file__), "data", "upload.txt")
+            res = await pc.uploadfile(files=[testfile])
+            assert res == {"result": 0, "metadata": {"size": 14}}
+
     async def test_get_files(self):
         async with DummyPyCloud() as pc:
             assert await pc.getfilelink(fileid=1) == 'https://first.pcloud.com/verylonglink/test.txt'

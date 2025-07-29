@@ -4,6 +4,7 @@ import logging
 import os
 from hashlib import sha1
 
+import aiofiles
 import aiohttp
 
 from async_pcloud.validate import MODE_AND, RequiredParameterCheck
@@ -223,6 +224,28 @@ class AsyncPyCloud:
     # File
     @RequiredParameterCheck(("files", "data"))
     async def uploadfile(self, **kwargs):
+        # TODO: upload chunks (streaming)
+        data = kwargs.get("data")
+        if data:
+            if isinstance(data, aiohttp.FormData):
+                return await self._do_request("uploadfile", method="POST", **kwargs)
+            else:
+                raise ValueError("data must be aiohttp.FormData")
+        files = kwargs.pop("files", [])
+        if not files:
+            raise ValueError("no data or files provided")
+        if not isinstance(files, list):
+            raise TypeError("files must be a list of file paths")
+        log.debug(f"Uploading {len(files)} files: {files}")
+        form = aiohttp.FormData()
+        for file_path in files:
+            if not os.path.isfile(file_path):
+                raise FileNotFoundError(f"File does not exist: {file_path}")
+            filename = os.path.basename(file_path)
+            async with aiofiles.open(file_path, mode="rb") as f:
+                content = await f.read()
+            form.add_field("file", content, filename=filename)
+        kwargs["data"] = form
         return await self._do_request("uploadfile", method="POST", **kwargs)
 
     @RequiredParameterCheck(("path", "folderid"))
