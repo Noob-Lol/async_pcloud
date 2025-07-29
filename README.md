@@ -2,6 +2,9 @@
 
 this in an indirect fork of https://github.com/tomgross/pcloud/
 
+[![Package test status](https://github.com/Noob-Lol/async_pcloud/actions/workflows/python-package.yml/badge.svg)](https://github.com/Noob-Lol/async_pcloud/actions)
+[![PyPI version](https://img.shields.io/pypi/v/async_pcloud.svg)](https://pypi.org/project/async_pcloud)
+
 ## Difference
 It's async, uses aiohttp. I plan to reimplement all functions, and add extra - implement some of the NotImplemented, make useful combinations.
 
