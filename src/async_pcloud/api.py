@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import os
 from hashlib import sha1
 
 import aiohttp
@@ -40,6 +41,7 @@ class AsyncPyCloud:
     endpoints = {
         "api": "https://api.pcloud.com/",
         "eapi": "https://eapi.pcloud.com/",
+        "test": "http://localhost:5023/",
     }
 
     def __init__(self, token, endpoint="eapi", folder=None, headers={"User-Agent": f"async_pcloud/{__version__}"}):
@@ -47,10 +49,9 @@ class AsyncPyCloud:
         self.folder = folder
         self.headers = headers
         self.__version__ = __version__
-        if endpoint not in self.endpoints:
-            raise ValueError("Endpoint (%s) not found. Use one of: %s", endpoint, ",".join(self.endpoints.keys()),)
-        else:
-            self.endpoint = self.endpoints.get(endpoint)
+        self.endpoint = self.endpoints.get(endpoint)
+        if not self.endpoint:
+            raise ValueError(f"Endpoint ({endpoint}) not found. Use one of: {', '.join(self.endpoints.keys())}")
         self.session = None
 
     async def __aenter__(self):
@@ -142,7 +143,7 @@ class AsyncPyCloud:
         resp = await self._do_request("getdigest", False)
         return bytes(resp["digest"], "utf-8")
 
-    async def get_auth(self, email: str, password: str, token_expire=31536000, verbose=False):
+    async def get_auth(self, email: str, password: str, token_expire=31536000, verbose=False) -> str:
         """Logs into pCloud and returns the token. Defaults to 1 year. Also prints it if verbose."""
         digest = await self.getdigest()
         passworddigest = sha1(password.encode("utf-8") + bytes(sha1(email.encode("utf-8")).hexdigest(), "utf-8") + digest)
@@ -436,6 +437,7 @@ class AsyncPyCloud:
     @RequiredParameterCheck(("code",))
     async def getpubzip(self, unzip=False, **kwargs):
         raise NotImplementedError
+        # TODO: Implement this in async
         # zipresponse = self._do_request(
         #     "getpubzip", auth=False, json=False, **kwargs
         # )

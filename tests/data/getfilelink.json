@@ -1,0 +1,9 @@
+{
+    "result": 0,
+    "dwltag": "idkwhatthisis",
+    "hash": 10527925596754422372,
+    "size": 7,
+    "expires": "Wed, 30 Jul 2099 02:55:56 +0000",
+    "path": "/verylonglink/test.txt",
+    "hosts": ["first.pcloud.com", "second.pcloud.com"]
+}

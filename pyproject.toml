@@ -18,8 +18,16 @@ dynamic = ["version"]
 
 keywords = ["Python", "pCloud", "async", "REST"]
 
-dependencies = [ "aiohttp>=3.9,<4" ]
 
 [project.urls]
 Homepage = "https://github.com/Noob-Lol/async_pcloud"
 Issues = "https://github.com/Noob-Lol/async_pcloud/issues"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.0.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
