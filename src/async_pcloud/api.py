@@ -249,7 +249,9 @@ class AsyncPyCloud:
         return await self._do_request("uploadfile", method="POST", **kwargs)
 
     @RequiredParameterCheck(("path", "folderid"))
-    async def upload_one_file(self, filename: str, content: str | bytes, **kwargs):
+    async def upload_one_file(self, filename: str, content, **kwargs):
+        if not isinstance(content, bytes) and not isinstance(content, str):
+            raise TypeError("content must be bytes or str")
         data = aiohttp.FormData()
         data.add_field('filename', content, filename=filename)
         return await self.uploadfile(data=data, **kwargs)
