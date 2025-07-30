@@ -343,7 +343,7 @@ class AsyncPyCloud:
             if not_found_ok:
                 return
             raise Exception(response['error'])
-        return f'https://{response['hosts'][0]}{response['path']}'
+        return f"https://{response['hosts'][0]}{response['path']}"
 
     @RequiredParameterCheck(("path", "fileid"))
     async def getfilelink(self, not_found_ok=False, **kwargs):
