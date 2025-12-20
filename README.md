@@ -26,7 +26,7 @@ there are 2 ways to use the AsyncPyCloud.
 ```py
 import asyncio
 from async_pcloud import AsyncPyCloud
-pcloud = AsyncPyCloud('token', endpoint="api")
+pcloud = AsyncPyCloud("token", endpoint="api")
 
 async def main():
     await pcloud.connect()
@@ -40,8 +40,11 @@ asyncio.run(main())
 
 2. async with - auto connect, disconnect:
 ```py
+pcloud = AsyncPyCloud("token")
+
 async def main():
-    async with AsyncPyCloud('token') as pcloud:
+    async with pcloud:
+    # 'async with AsyncPyCloud("token") as pcloud:' will also work
         data = await pcloud.listfolder(folderid=0)
         print(data)
 ```
@@ -52,9 +55,3 @@ async def main():
   - endpoint - can be 'api' or 'eapi', choose the one used by your account
   - folder - base folder name, will be added before the path param
   - headers - you can make custom user agent or something
-
-
-
-
-
-

@@ -18,7 +18,7 @@ dynamic = ["version"]
 
 keywords = ["Python", "pCloud", "async", "REST"]
 
-dependencies = [ "aiohttp>=3.9,<4", "aiofiles>=23.1.0" ]
+dependencies = [ "aiohttp>=3.9,<4", "aiofiles>=23.1.0", "anyio>=3.7.1" ]
 
 [project.urls]
 Homepage = "https://github.com/Noob-Lol/async_pcloud"

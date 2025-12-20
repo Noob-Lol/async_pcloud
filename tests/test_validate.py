@@ -1,6 +1,6 @@
 import pytest
-from async_pcloud.validate import RequiredParameterCheck
-from async_pcloud.validate import MODE_AND
+
+from async_pcloud.validate import MODE_AND, RequiredParameterCheck
 
 
 @RequiredParameterCheck(("path", "folderid"))
@@ -19,7 +19,7 @@ def extractarchive(path=None, fileid=None, topath=None, tofolderid=None, extra=N
     return path, fileid, topath, tofolderid
 
 
-class TestPathIdentifier(object):
+class TestPathIdentifier:
     def test_validiate_path(self):
         assert foo(path="/", bar="x") == ("/", None, "x")
 
@@ -42,7 +42,7 @@ class TestPathIdentifier(object):
         assert foo_all(folderid="0", path="/") == ("/", "0", None)
 
 
-class TestMultipleValidators(object):
+class TestMultipleValidators:
     def test_single(self):
         with pytest.raises(ValueError):
             assert extractarchive(path="1", fileid=1)  # type: ignore

@@ -1,15 +1,14 @@
 import datetime
 import json
 import logging
-import os
 from hashlib import sha1
 
 import aiofiles
 import aiohttp
-
-from async_pcloud.validate import MODE_AND, RequiredParameterCheck
+import anyio
 
 from . import __version__
+from .validate import MODE_AND, RequiredParameterCheck
 
 # from pcloud.utils
 log = logging.getLogger("async_pcloud")
@@ -45,7 +44,9 @@ class AsyncPyCloud:
         "test": "http://localhost:5023/",
     }
 
-    def __init__(self, token, endpoint="eapi", folder=None, headers={"User-Agent": f"async_pcloud/{__version__}"}):
+    def __init__(self, token, endpoint="eapi", folder=None, headers=None):
+        if headers is None:
+            headers = {"User-Agent": f"async_pcloud/{__version__}"}
         self.token = token
         self.folder = folder
         self.headers = headers
@@ -89,22 +90,26 @@ class AsyncPyCloud:
 
     def _redact_auth(self, data: dict):
         # this is genius
-        if 'auth' in data:
-            data['auth'] = '***'
+        if "auth" in data:
+            data["auth"] = "***"
         return data
 
-    def _prepare_params(self, params: dict = {}, auth=True, **kwargs):
+    def _prepare_params(self, params=None, auth=True, **kwargs):
         """Converts kwargs to params, and does auth check."""
+        if params is None:
+            params = {}
         new_params = {**params, **kwargs}
         if not self.token and auth:
             raise NoTokenError
-        if auth and not new_params.get('auth'):
-            new_params['auth'] = self.token
-        if new_params.get('path'):
-            new_params['path'] = self._fix_path(new_params['path'])
+        if auth and not new_params.get("auth"):
+            new_params["auth"] = self.token
+        if new_params.get("path"):
+            new_params["path"] = self._fix_path(new_params["path"])
         return new_params
 
-    async def _do_request(self, url, auth=True, method="GET", data=None, params: dict = {}, **kwargs) -> dict:
+    async def _do_request(self, url, auth=True, method="GET", data=None, params=None, **kwargs) -> dict:
+        if params is None:
+            params = {}
         if not self.session:
             raise NoSessionError
         params = self._prepare_params(params, auth, **kwargs)
@@ -114,7 +119,9 @@ class AsyncPyCloud:
             log.debug(f"Response: {response_json} {response.status} {response.reason}")
             return response_json
 
-    async def _get_text(self, url, auth=True, not_found_ok=False, params: dict = {}, **kwargs):
+    async def _get_text(self, url, auth=True, not_found_ok=False, params=None, **kwargs):
+        if params is None:
+            params = {}
         if not self.session:
             raise NoSessionError
         params = self._prepare_params(params, auth, **kwargs)
@@ -153,10 +160,10 @@ class AsyncPyCloud:
             "username": email,
             "digest": digest.decode("utf-8"),
             "passworddigest": passworddigest.hexdigest(),
-            "authexpire": token_expire
+            "authexpire": token_expire,
         }
         response = await self.userinfo(auth=False, params=params)
-        token = response['auth']
+        token = response["auth"]
         if verbose:
             print(token)
         return token
@@ -239,9 +246,9 @@ class AsyncPyCloud:
         log.debug(f"Uploading {len(files)} files: {files}")
         form = aiohttp.FormData()
         for file_path in files:
-            if not os.path.isfile(file_path):
+            if not await anyio.Path(file_path).exists():
                 raise FileNotFoundError(f"File does not exist: {file_path}")
-            filename = os.path.basename(file_path)
+            filename = anyio.Path(file_path).name
             async with aiofiles.open(file_path, mode="rb") as f:
                 content = await f.read()
             form.add_field("file", content, filename=filename)
@@ -253,7 +260,7 @@ class AsyncPyCloud:
         if not isinstance(content, bytes) and not isinstance(content, str):
             raise TypeError("content must be bytes or str")
         data = aiohttp.FormData()
-        data.add_field('filename', content, filename=filename)
+        data.add_field("filename", content, filename=filename)
         return await self.uploadfile(data=data, **kwargs)
 
     @RequiredParameterCheck(("progresshash",))
@@ -289,7 +296,7 @@ class AsyncPyCloud:
 
     async def search(self, query: str, **kwargs):
         """Undocumented, also supports offset and limit kwargs."""
-        return await self._do_request('search', params={'query': query, **kwargs})
+        return await self._do_request("search", params={"query": query, **kwargs})
 
     # Auth
     async def sendverificationemail(self, **kwargs):
@@ -339,10 +346,10 @@ class AsyncPyCloud:
 
     # Streaming
     def _make_link(self, response: dict, not_found_ok=False):
-        if 'not found' in response.get('error', ''):
+        if "not found" in response.get("error", ""):
             if not_found_ok:
                 return
-            raise Exception(response['error'])
+            raise Exception(response["error"])
         return f"https://{response['hosts'][0]}{response['path']}"
 
     @RequiredParameterCheck(("path", "fileid"))

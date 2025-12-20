@@ -1,11 +1,14 @@
 import os
 
 import pytest
+
 from async_pcloud import AsyncPyCloud
 
 
 class DummyPyCloud(AsyncPyCloud):
-    def __init__(self, token="TOKEN", endpoint="test", folder=None, headers={"User-Agent": "test_async_pcloud/0.1"}):
+    def __init__(self, token="TOKEN", endpoint="test", folder=None, headers=None):
+        if headers is None:
+            headers = {"User-Agent": "test_async_pcloud/0.1"}
         super().__init__(token, endpoint, folder, headers)
 
 
@@ -15,7 +18,7 @@ def check_pass(json_data: dict):
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("start_mock_server")
-class TestPcloudApi(object):
+class TestPcloudApi:
     async def test_userinfo(self):
         async with DummyPyCloud() as pc:
             pc.change_token("2")
@@ -32,8 +35,8 @@ class TestPcloudApi(object):
 
     async def test_get_files(self):
         async with DummyPyCloud() as pc:
-            assert await pc.getfilelink(fileid=1) == 'https://first.pcloud.com/verylonglink/test.txt'
-            assert await pc.gettextfile(fileid=1) == 'this isnt json'
+            assert await pc.getfilelink(fileid=1) == "https://first.pcloud.com/verylonglink/test.txt"
+            assert await pc.gettextfile(fileid=1) == "this isnt json"
 
     async def test_other(self):
         async with DummyPyCloud() as pc:

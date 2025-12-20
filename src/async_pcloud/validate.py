@@ -4,7 +4,7 @@ MODE_OR = 0
 MODE_AND = 1
 
 
-class RequiredParameterCheck(object):
+class RequiredParameterCheck:
     """A decorator that checks if at least on named parameter is present"""
 
     def __init__(self, required, mode=MODE_OR):

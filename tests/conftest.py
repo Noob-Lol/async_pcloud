@@ -1,37 +1,39 @@
 import json
 import logging
-from os import path
 
+import aiofiles
 import aiohttp
 import pytest
 from aiohttp import web
+from anyio import Path
 
-log = logging.getLogger('async_pcloud')
+log = logging.getLogger("async_pcloud")
 log.setLevel(logging.DEBUG)
 PORT = 5023
 
 
 @pytest.fixture
 async def start_mock_server():
-    BASE_DIR = path.dirname(__file__)
-    DATA_DIR = path.join(BASE_DIR, "data")
+    BASE_DIR = Path(__file__).parent
+    DATA_DIR = str(BASE_DIR / "data")
 
     async def generic_get_handler(request: web.Request):
         method = request.path.lstrip("/").split("?")[0]
-        file_path = path.join(DATA_DIR, f"{method}.json")
-        safepath = path.realpath(file_path)
+        file_path = BASE_DIR / "data" / f"{method}.json"
+        safepath = str(file_path)
         query = request.query_string
         log.debug(f"Processing Method: {method}, query: {query}")
         if method == "gettextfile":
             return web.Response(text="this isnt json", status=200)
-        if not safepath.startswith(DATA_DIR) or not path.exists(safepath):
-            if query == 'auth=TOKEN':
+        if not safepath.startswith(DATA_DIR) or not await Path(safepath).exists():
+            if query == "auth=TOKEN":
                 # default pass for get methods
                 return web.json_response({"result": 0, "pass": "true"}, status=200)
             return web.json_response({"Error": "Path not found or not accessible!"}, status=404)
-        with open(safepath, "r", encoding="utf-8") as f:
+        async with aiofiles.open(safepath, encoding="utf-8") as f:
             try:
-                content = json.load(f)
+                content = await f.read()
+                content = json.loads(content)
             except json.JSONDecodeError:
                 return web.Response(text="Invalid JSON file", status=500)
         return web.json_response(content)
@@ -49,7 +51,7 @@ async def start_mock_server():
         log.debug(f"File size: {size}")
         return web.json_response({
             "result": 0,
-            "metadata": {"size": size}
+            "metadata": {"size": size},
         })
 
     app = web.Application()
