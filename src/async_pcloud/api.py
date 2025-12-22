@@ -26,7 +26,7 @@ def to_api_datetime(dt):
 
 class NoSessionError(Exception):
     """Raised when the session is not connected."""
-    def __init__(self, message="Not connected to PCloud API, call connect() first."):
+    def __init__(self, message="Not connected to PCloud API, call connect() first or set a session."):
         super().__init__(message)
 
 
@@ -44,17 +44,23 @@ class AsyncPyCloud:
         "test": "http://localhost:5023/",
     }
 
-    def __init__(self, token, endpoint="eapi", folder=None, headers=None):
-        if headers is None:
-            headers = {"User-Agent": f"async_pcloud/{__version__}"}
+    def __init__(self, token, endpoint="eapi", folder=None, headers=None, session=None):
         self.token = token
         self.folder = folder
-        self.headers = headers
+        self.headers = headers or {"User-Agent": f"async_pcloud/{__version__}"}
         self.__version__ = __version__
-        self.endpoint = self.endpoints.get(endpoint)
-        if not self.endpoint:
+        valid_endpoint = self.endpoints.get(endpoint)
+        if not valid_endpoint:
             raise ValueError(f"Endpoint ({endpoint}) not found. Use one of: {', '.join(self.endpoints.keys())}")
-        self.session = None
+        self.endpoint = valid_endpoint
+        self._provide_session = session is None
+        if session:
+            if not isinstance(session, aiohttp.ClientSession):
+                raise TypeError("session must be an aiohttp.ClientSession")
+            self.session = session
+            self.headers.update(session.headers)
+        else:
+            self.session = None
 
     async def __aenter__(self):
         await self.connect()
@@ -65,19 +71,28 @@ class AsyncPyCloud:
 
     async def connect(self):
         """Creates a session, must be called before any requests."""
-        timeout = aiohttp.ClientTimeout(10)
-        self.session = aiohttp.ClientSession(self.endpoint, headers=self.headers, timeout=timeout, raise_for_status=True)
-        log.debug("Connected.")
+        if not self.session and self._provide_session:
+            self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(10), raise_for_status=True)
+            log.debug("Connected.")
+        else:
+            log.debug("Session already exists.")
 
     async def disconnect(self):
-        if not self.session:
-            return
-        await self.session.close()
-        log.debug("Disconnected.")
-        self.session = None
+        if self.session and self._provide_session:
+            await self.session.close()
+            log.debug("Disconnected.")
+            self.session = None
+        else:
+            log.debug("No session to disconnect.")
 
     def change_token(self, new_token):
         self.token = new_token
+
+    def set_session(self, session: aiohttp.ClientSession):
+        self.session = session
+        self.headers.update(session.headers)
+        self._provide_session = False
+        log.debug("Session set.")
 
     def _fix_path(self, path: str):
         if not path.startswith("/"):
@@ -107,28 +122,32 @@ class AsyncPyCloud:
             new_params["path"] = self._fix_path(new_params["path"])
         return new_params
 
-    async def _do_request(self, url, auth=True, method="GET", data=None, params=None, **kwargs) -> dict:
+    async def _do_request(self, url: str, auth=True, method="GET", data=None, params=None, **kwargs):
         if params is None:
             params = {}
         if not self.session:
             raise NoSessionError
         params = self._prepare_params(params, auth, **kwargs)
         log.debug(f"Request: {method} {url} {self._redact_auth(params.copy())}")
-        async with self.session.request(method, url, data=data, params=params) as response:
-            response_json = await response.json()
+        # add endpoint
+        url = self.endpoint + url
+        async with self.session.request(method, url, data=data, params=params, headers=self.headers) as response:
+            response.raise_for_status()
+            response_json: dict = await response.json()
             log.debug(f"Response: {response_json} {response.status} {response.reason}")
             return response_json
 
-    async def _get_text(self, url, auth=True, not_found_ok=False, params=None, **kwargs):
+    async def _get_text(self, url: str, auth=True, not_found_ok=False, params=None, **kwargs):
         if params is None:
             params = {}
         if not self.session:
             raise NoSessionError
         params = self._prepare_params(params, auth, **kwargs)
         log.debug(f"Request: GET (text) {url} {self._redact_auth(params.copy())}")
-        r = await self.session.get(url, params=params)
-        log.debug(f"Response: {r.status} {r.reason}")
-        text = await r.text()
+        async with self.session.get(self.endpoint + url, params=params, headers=self.headers) as response:
+            response.raise_for_status()
+            log.debug(f"Response: {response.status} {response.reason}")
+            text = await response.text()
         try:
             j = json.loads(text)
         except json.JSONDecodeError:
@@ -143,8 +162,9 @@ class AsyncPyCloud:
     async def _default_get(self, url, **kwargs):
         if not self.session:
             raise NoSessionError
-        r = await self.session.get(url, **kwargs)
-        return await r.read()
+        async with self.session.get(url, **kwargs) as response:
+            response.raise_for_status()
+            return await response.read()
 
     # Authentication stuff
     async def getdigest(self):
