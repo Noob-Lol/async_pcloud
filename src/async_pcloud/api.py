@@ -3,9 +3,8 @@ import json
 import logging
 from hashlib import sha1
 
-import aiofiles
 import aiohttp
-import anyio
+from anyio import Path
 
 from . import __version__
 from .validate import MODE_AND, RequiredParameterCheck
@@ -265,12 +264,12 @@ class AsyncPyCloud:
             raise TypeError("files must be a list of file paths")
         log.debug(f"Uploading {len(files)} files: {files}")
         form = aiohttp.FormData()
-        for file_path in files:
-            if not await anyio.Path(file_path).exists():
+        for file in files:
+            file_path = Path(file)
+            if not await file_path.exists():
                 raise FileNotFoundError(f"File does not exist: {file_path}")
-            filename = anyio.Path(file_path).name
-            async with aiofiles.open(file_path, mode="rb") as f:
-                content = await f.read()
+            filename = file_path.name
+            content = await file_path.read_bytes()
             form.add_field("file", content, filename=filename)
         kwargs["data"] = form
         return await self._do_request("uploadfile", method="POST", **kwargs)

@@ -1,11 +1,10 @@
 import json
 import logging
 
-import aiofiles
 import aiohttp
 import pytest
 from aiohttp import web
-from anyio import Path
+from anyio import Path, open_file
 
 log = logging.getLogger("async_pcloud")
 log.setLevel(logging.DEBUG)
@@ -30,7 +29,7 @@ async def start_mock_server():
                 # default pass for get methods
                 return web.json_response({"result": 0, "pass": "true"}, status=200)
             return web.json_response({"Error": "Path not found or not accessible!"}, status=404)
-        async with aiofiles.open(safepath, encoding="utf-8") as f:
+        async with await open_file(safepath, encoding="utf-8") as f:
             try:
                 content = await f.read()
                 content = json.loads(content)
