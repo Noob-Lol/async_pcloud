@@ -1,5 +1,5 @@
-__version__ = "0.2.0"
-
 from .api import AsyncPyCloud
+from .exceptions import ApiError, NoSessionError, NoTokenError
+from .utils import __version__
 
-__all__ = ["AsyncPyCloud"]
+__all__ = ["ApiError", "AsyncPyCloud", "NoSessionError", "NoTokenError", "__version__"]

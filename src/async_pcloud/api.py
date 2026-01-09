@@ -1,43 +1,18 @@
-import datetime
 import json
-import logging
 from hashlib import sha1
+from typing import ClassVar
 
 import aiohttp
 from anyio import Path
 
-from . import __version__
+from .exceptions import ApiError, NoSessionError, NoTokenError
+from .utils import __version__, log, to_api_datetime
 from .validate import MODE_AND, RequiredParameterCheck
-
-# from pcloud.utils
-log = logging.getLogger("async_pcloud")
-
-
-def to_api_datetime(dt):
-    """Converter to a datetime structure the pCloud API understands
-
-    See https://docs.pcloud.com/structures/datetime.html
-    """
-    if isinstance(dt, datetime.datetime):
-        return dt.isoformat()
-    return dt
-
-
-class NoSessionError(Exception):
-    """Raised when the session is not connected."""
-    def __init__(self, message="Not connected to PCloud API, call connect() first or set a session."):
-        super().__init__(message)
-
-
-class NoTokenError(Exception):
-    """Raised when the token is missing."""
-    def __init__(self, message="PCloud token is missing."):
-        super().__init__(message)
 
 
 class AsyncPyCloud:
     """Simple async wrapper for PCloud API."""
-    endpoints = {
+    endpoints: ClassVar = {
         "api": "https://api.pcloud.com/",
         "eapi": "https://eapi.pcloud.com/",
         "test": "http://localhost:5023/",
@@ -50,12 +25,12 @@ class AsyncPyCloud:
         self.__version__ = __version__
         valid_endpoint = self.endpoints.get(endpoint)
         if not valid_endpoint:
-            raise ValueError(f"Endpoint ({endpoint}) not found. Use one of: {', '.join(self.endpoints.keys())}")
+            msg = f"Endpoint ({endpoint}) not found. Use one of: {', '.join(self.endpoints.keys())}"
+            raise ValueError(msg)
         self.endpoint = valid_endpoint
         self._provide_session = session is None
         if session:
-            if not isinstance(session, aiohttp.ClientSession):
-                raise TypeError("session must be an aiohttp.ClientSession")
+            session = self._get_session()
             self.session = session
             self.headers.update(session.headers)
         else:
@@ -93,22 +68,30 @@ class AsyncPyCloud:
         self._provide_session = False
         log.debug("Session set.")
 
+    def _get_session(self):
+        if self.session is None:
+            raise NoSessionError
+        if not isinstance(self.session, aiohttp.ClientSession):
+            msg = "session must be an aiohttp.ClientSession"
+            raise TypeError(msg)
+        return self.session
+
     def _fix_path(self, path: str):
         if not path.startswith("/"):
             path = "/" + path
         if self.folder:
             path = f"/{self.folder}{path}"
-        if path.endswith("/"):
-            path = path[:-1]
-        return path
+        return path.removesuffix("/")
 
-    def _redact_auth(self, data: dict):
+    @staticmethod
+    def _redact_auth(data: dict):
         # this is genius
-        if "auth" in data:
-            data["auth"] = "***"
-        return data
+        data_copy = data.copy()
+        if "auth" in data_copy:
+            data_copy["auth"] = "***"
+        return data_copy
 
-    def _prepare_params(self, params=None, auth=True, **kwargs):
+    def _prepare_params(self, params=None, *, auth=True, **kwargs):
         """Converts kwargs to params, and does auth check."""
         if params is None:
             params = {}
@@ -121,56 +104,53 @@ class AsyncPyCloud:
             new_params["path"] = self._fix_path(new_params["path"])
         return new_params
 
-    async def _do_request(self, url: str, auth=True, method="GET", data=None, params=None, **kwargs):
+    async def _do_request(self, url: str, method="GET", data=None, params=None, *, auth=True, **kwargs):
         if params is None:
             params = {}
-        if not self.session:
-            raise NoSessionError
-        params = self._prepare_params(params, auth, **kwargs)
-        log.debug(f"Request: {method} {url} {self._redact_auth(params.copy())}")
+        session = self._get_session()
+        params = self._prepare_params(params, auth=auth, **kwargs)
+        log.debug("Request: %s %s %s", method, url, self._redact_auth(params))
         # add endpoint
         url = self.endpoint + url
-        async with self.session.request(method, url, data=data, params=params, headers=self.headers) as response:
+        async with session.request(method, url, data=data, params=params, headers=self.headers) as response:
             response.raise_for_status()
             response_json: dict = await response.json()
-            log.debug(f"Response: {response_json} {response.status} {response.reason}")
+            log.debug("Response: %s %d %s", response_json, response.status, response.reason)
             return response_json
 
-    async def _get_text(self, url: str, auth=True, not_found_ok=False, params=None, **kwargs):
+    async def _get_text(self, url: str, params=None, *, auth=True, not_found_ok=False, **kwargs):
         if params is None:
             params = {}
-        if not self.session:
-            raise NoSessionError
-        params = self._prepare_params(params, auth, **kwargs)
-        log.debug(f"Request: GET (text) {url} {self._redact_auth(params.copy())}")
-        async with self.session.get(self.endpoint + url, params=params, headers=self.headers) as response:
+        session = self._get_session()
+        params = self._prepare_params(params, auth=auth, **kwargs)
+        log.debug("Request: GET (text) %s %s", url, self._redact_auth(params))
+        async with session.get(self.endpoint + url, params=params, headers=self.headers) as response:
             response.raise_for_status()
-            log.debug(f"Response: {response.status} {response.reason}")
+            log.debug("Response: %d %s", response.status, response.reason)
             text = await response.text()
         try:
             j = json.loads(text)
         except json.JSONDecodeError:
             return text
         if j.get("error"):
-            log.debug(f"Bad response: {j}")
+            log.debug("Bad response: %s", j)
             if not_found_ok and "not found" in j["error"]:
-                return
-            raise Exception(j["error"])
+                return None
+            raise ApiError(j["error"])
         return text
 
     async def _default_get(self, url, **kwargs):
-        if not self.session:
-            raise NoSessionError
-        async with self.session.get(url, **kwargs) as response:
+        session = self._get_session()
+        async with session.get(url, **kwargs) as response:
             response.raise_for_status()
             return await response.read()
 
     # Authentication stuff
     async def getdigest(self):
-        resp = await self._do_request("getdigest", False)
+        resp = await self._do_request("getdigest", auth=False)
         return bytes(resp["digest"], "utf-8")
 
-    async def get_auth(self, email: str, password: str, token_expire=31536000, verbose=False) -> str:
+    async def get_auth(self, email: str, password: str, token_expire=31536000, *, verbose=False) -> str:
         """Logs into pCloud and returns the token. Defaults to 1 year. Also prints it if verbose."""
         digest = await self.getdigest()
         passworddigest = sha1(password.encode("utf-8") + bytes(sha1(email.encode("utf-8")).hexdigest(), "utf-8") + digest)
@@ -191,8 +171,8 @@ class AsyncPyCloud:
     async def userinfo(self, **kwargs):
         return await self._do_request("userinfo", **kwargs)
 
-    def supportedlanguages(self):
-        return self._do_request("supportedlanguages")
+    async def supportedlanguages(self):
+        return await self._do_request("supportedlanguages")
 
     @RequiredParameterCheck(("language",))
     async def setlanguage(self, **kwargs):
@@ -255,19 +235,22 @@ class AsyncPyCloud:
         if data:
             if isinstance(data, aiohttp.FormData):
                 return await self._do_request("uploadfile", method="POST", **kwargs)
-            else:
-                raise ValueError("data must be aiohttp.FormData")
+            msg = "data must be aiohttp.FormData"
+            raise ValueError(msg)
         files = kwargs.pop("files", [])
         if not files:
-            raise ValueError("no data or files provided")
+            msg = "no data or files provided"
+            raise ValueError(msg)
         if not isinstance(files, list):
-            raise TypeError("files must be a list of file paths")
-        log.debug(f"Uploading {len(files)} files: {files}")
+            msg = "files must be a list of file paths"
+            raise TypeError(msg)
+        log.debug("Uploading %d files: %s", len(files), files)
         form = aiohttp.FormData()
         for file in files:
             file_path = Path(file)
             if not await file_path.exists():
-                raise FileNotFoundError(f"File does not exist: {file_path}")
+                msg = f"File does not exist: {file_path}"
+                raise FileNotFoundError(msg)
             filename = file_path.name
             content = await file_path.read_bytes()
             form.add_field("file", content, filename=filename)
@@ -277,7 +260,8 @@ class AsyncPyCloud:
     @RequiredParameterCheck(("path", "folderid"))
     async def upload_one_file(self, filename: str, content, **kwargs):
         if not isinstance(content, bytes) and not isinstance(content, str):
-            raise TypeError("content must be bytes or str")
+            msg = "content must be bytes or str"
+            raise TypeError(msg)
         data = aiohttp.FormData()
         data.add_field("filename", content, filename=filename)
         return await self.uploadfile(data=data, **kwargs)
@@ -364,24 +348,25 @@ class AsyncPyCloud:
         return await self._do_request("deactivateuser", **kwargs)
 
     # Streaming
-    def _make_link(self, response: dict, not_found_ok=False):
+    @staticmethod
+    def _make_link(response: dict, *, not_found_ok=False):
         if "not found" in response.get("error", ""):
             if not_found_ok:
-                return
-            raise Exception(response["error"])
+                return None
+            raise ApiError(response["error"])
         return f"https://{response['hosts'][0]}{response['path']}"
 
     @RequiredParameterCheck(("path", "fileid"))
-    async def getfilelink(self, not_found_ok=False, **kwargs):
+    async def getfilelink(self, *, not_found_ok=False, **kwargs):
         """Returns a link to the file."""
         response = await self._do_request("getfilelink", **kwargs)
-        return self._make_link(response, not_found_ok)
+        return self._make_link(response, not_found_ok=not_found_ok)
 
     @RequiredParameterCheck(("path", "fileid"))
-    async def download_file(self, not_found_ok=False, **kwargs):
-        download_url = await self.getfilelink(not_found_ok, **kwargs)
+    async def download_file(self, *, not_found_ok=False, **kwargs):
+        download_url = await self.getfilelink(not_found_ok=not_found_ok, **kwargs)
         if download_url is None:
-            return
+            return None
         return await self._default_get(download_url)
 
     @RequiredParameterCheck(("path", "fileid"))
@@ -404,7 +389,7 @@ class AsyncPyCloud:
         return self._make_link(response)
 
     @RequiredParameterCheck(("path", "fileid"))
-    async def gettextfile(self, not_found_ok=False, **kwargs):
+    async def gettextfile(self, *, not_found_ok=False, **kwargs):
         return await self._get_text("gettextfile", not_found_ok=not_found_ok, **kwargs)
 
     # Archiving
@@ -486,7 +471,7 @@ class AsyncPyCloud:
         return await self._do_request("getfolderpublink", **kwargs)
 
     @RequiredParameterCheck(("code",))
-    async def getpubzip(self, unzip=False, **kwargs):
+    async def getpubzip(self, *, unzip=False, **kwargs):
         raise NotImplementedError
         # TODO: Implement this in async
         # zipresponse = self._do_request(

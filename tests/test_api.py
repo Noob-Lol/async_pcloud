@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +12,9 @@ class DummyPyCloud(AsyncPyCloud):
         super().__init__(token, endpoint, folder, headers)
 
 
+pc = DummyPyCloud()
+
+
 def check_pass(json_data: dict):
     assert json_data.get("result") == 0 and json_data.get("pass") == "true"
 
@@ -20,26 +23,27 @@ def check_pass(json_data: dict):
 @pytest.mark.usefixtures("start_mock_server")
 class TestPcloudApi:
     async def test_userinfo(self):
-        async with DummyPyCloud() as pc:
+        async with pc:
             pc.change_token("2")
             assert pc.token == "2"
             assert await pc.getip() == {"result": 0, "ip": "127.0.0.1", "country": "idk"}
             token = await pc.get_auth("test@example.com", "password")
             assert token == "TOKEN"
+            pc.change_token(token)
 
     async def test_upload_files(self):
-        async with DummyPyCloud() as pc:
-            testfile = os.path.join(os.path.dirname(__file__), "data", "upload.txt")
+        async with pc:
+            testfile = Path(__file__).parent / "data" / "upload.txt"
             res = await pc.uploadfile(files=[testfile])
             assert res == {"result": 0, "metadata": {"size": 14}}
 
     async def test_get_files(self):
-        async with DummyPyCloud() as pc:
+        async with pc:
             assert await pc.getfilelink(fileid=1) == "https://first.pcloud.com/verylonglink/test.txt"
             assert await pc.gettextfile(fileid=1) == "this isnt json"
 
     async def test_other(self):
-        async with DummyPyCloud() as pc:
+        async with pc:
             assert await pc.currentserver() == {"result": 0, "ip": "127.0.0.1"}
             check_pass(await pc.supportedlanguages())
             check_pass(await pc.getfilehistory())

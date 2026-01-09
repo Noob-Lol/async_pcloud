@@ -35,4 +35,7 @@ test = [
 asyncio_mode = "auto"
 
 [tool.setuptools.dynamic]
-version = {attr = "async_pcloud.__version__"}
+version = {attr = "async_pcloud.utils.__version__"}
+
+[tool.ruff.per-file-ignores]
+"tests/*" = ["PLR6301", "RUF029"]

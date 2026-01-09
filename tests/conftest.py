@@ -21,7 +21,7 @@ async def start_mock_server():
         file_path = BASE_DIR / "data" / f"{method}.json"
         safepath = str(file_path)
         query = request.query_string
-        log.debug(f"Processing Method: {method}, query: {query}")
+        log.debug("Processing Method: %s, query: %s", method, query)
         if method == "gettextfile":
             return web.Response(text="this isnt json", status=200)
         if not safepath.startswith(DATA_DIR) or not await Path(safepath).exists():
@@ -40,14 +40,14 @@ async def start_mock_server():
     async def generic_post_handler(request: web.Request):
         reader = await request.multipart()
         field = await reader.next()
-        log.debug(f"Field type: {type(field)}")
+        log.debug("Field type: %s", type(field))
         if not isinstance(field, aiohttp.BodyPartReader):
             return web.json_response({"error": "Expected BodyPartReader"}, status=400)
         if field.name != "file":
             return web.json_response({"error": "Expected field 'file'"}, status=400)
         file_content = await field.read()
         size = len(file_content)
-        log.debug(f"File size: {size}")
+        log.debug("File size: %s", size)
         return web.json_response({
             "result": 0,
             "metadata": {"size": size},
@@ -64,7 +64,7 @@ async def start_mock_server():
     await runner.setup()
     site = web.TCPSite(runner, "localhost", PORT)
     await site.start()
-    log.debug(f"Started mock server on http://localhost:{PORT}")
+    log.debug("Started mock server on http://localhost:%s", PORT)
     yield
     log.debug("Shutting down server...")
     await runner.cleanup()
